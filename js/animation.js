@@ -4,8 +4,11 @@ const gradientToggle = document.getElementById('gradientToggle');
 const colorSpeedInput = document.getElementById('colorSpeed');
 const animationSpeedInput = document.getElementById('animationSpeed');
 const patternSelect = document.getElementById('patternSelect');
+const particleDensityInput = document.getElementById('particleDensity');
 const zoomInfo = document.querySelector('.zoom-info');
 
+// Initialize particle density to 100%
+let particleDensity = 1;
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
@@ -58,8 +61,8 @@ canvas.addEventListener('wheel', (e) => {
     const coords = getCanvasCoordinates(e.clientX, e.clientY);
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     
-    // Limit zoom range
-    const newScale = Math.min(Math.max(scale * delta, 0.1), 10);
+    // Extend zoom range to 1%
+    const newScale = Math.min(Math.max(scale * delta, 0.01), 10);
     if (newScale !== scale) {
         scale = newScale;
         zoomInfo.textContent = `Zoom: ${Math.round(scale * 100)}%`;
@@ -180,10 +183,11 @@ function draw() {
     const secondHue = (baseHue + 0.3) % 1;
     
     const pattern = parseInt(patternSelect.value);
-    // Scale particle count based on canvas size
+    // Scale particle count based on canvas size and density setting
     const baseParticleCount = pattern === 1 ? 20000 : 30000;
     const scaleFactor = (baseWidth * baseHeight) / (400 * 400);
-    const particleCount = Math.floor(baseParticleCount * scaleFactor);
+    const densityMultiplier = parseInt(particleDensityInput.value) / 100;
+    const particleCount = Math.floor(baseParticleCount * scaleFactor * densityMultiplier);
     
     // Adjust particle distribution based on canvas aspect ratio
     const cols = Math.floor(Math.sqrt(particleCount * baseWidth / baseHeight));
