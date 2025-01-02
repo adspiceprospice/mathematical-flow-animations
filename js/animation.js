@@ -2,22 +2,46 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const gradientToggle = document.getElementById('gradientToggle');
 const colorSpeedInput = document.getElementById('colorSpeed');
+const animationSpeedInput = document.getElementById('animationSpeed');
 const patternSelect = document.getElementById('patternSelect');
+const zoomInfo = document.querySelector('.zoom-info');
+
+let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+let baseWidth, baseHeight;
 
 function resizeCanvas() {
-    canvas.width = 400;
-    canvas.height = 400;
+    const containerRect = canvas.parentElement.getBoundingClientRect();
+    baseWidth = containerRect.width;
+    baseHeight = containerRect.height;
+    canvas.width = baseWidth;
+    canvas.height = baseHeight;
 }
-resizeCanvas();
 
-let mouseX = 200;
-let mouseY = 200;
+// Initial resize and window resize handler
+resizeCanvas();
+window.addEventListener('resize', () => {
+    resizeCanvas();
+});
+
+let mouseX = baseWidth / 2;
+let mouseY = baseHeight / 2;
 let isMouseOver = false;
 
-canvas.addEventListener('mousemove', (e) => {
+// Convert mouse coordinates to canvas space
+function getCanvasCoordinates(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    mouseX = e.clientX - rect.left;
-    mouseY = e.clientY - rect.top;
+    return {
+        x: (clientX - rect.left) / scale,
+        y: (clientY - rect.top) / scale
+    };
+}
+
+canvas.addEventListener('mousemove', (e) => {
+    const coords = getCanvasCoordinates(e.clientX, e.clientY);
+    mouseX = coords.x;
+    mouseY = coords.y;
 });
 
 canvas.addEventListener('mouseenter', () => {
@@ -26,6 +50,20 @@ canvas.addEventListener('mouseenter', () => {
 
 canvas.addEventListener('mouseleave', () => {
     isMouseOver = false;
+});
+
+// Add zoom functionality
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const coords = getCanvasCoordinates(e.clientX, e.clientY);
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    
+    // Limit zoom range
+    const newScale = Math.min(Math.max(scale * delta, 0.1), 10);
+    if (newScale !== scale) {
+        scale = newScale;
+        zoomInfo.textContent = `Zoom: ${Math.round(scale * 100)}%`;
+    }
 });
 
 function mag(x, y) {
@@ -80,8 +118,8 @@ function calculateFlowWave(x, y) {
     const q = x + 99 + Math.cos(9 / k) + o * k * innerWave * Math.sin(o * 4 - t);
     const c = o * e / 30 - t / 8;
     
-    const px = q * 0.7 * Math.sin(c) + 200;
-    const py = 200 + y / 9 * Math.cos(c * 4 - t / 2) - q / 2 * Math.cos(c);
+    const px = q * 0.7 * Math.sin(c) + baseWidth/2;
+    const py = baseHeight/2 + y / 9 * Math.cos(c * 4 - t / 2) - q / 2 * Math.cos(c);
     
     return applyMouseAttraction({ x: px, y: py });
 }
@@ -99,8 +137,8 @@ function calculateVortexField(x, y) {
     const fieldStrength = vortex1 * vortex2 + vortex3;
     const twist = Math.sin(r * 0.5 + t) * Math.PI;
     
-    const px = 200 + (dx * Math.cos(twist) - dy * Math.sin(twist)) * fieldStrength;
-    const py = 200 + (dx * Math.sin(twist) + dy * Math.cos(twist)) * fieldStrength;
+    const px = baseWidth/2 + (dx * Math.cos(twist) - dy * Math.sin(twist)) * fieldStrength;
+    const py = baseHeight/2 + (dx * Math.sin(twist) + dy * Math.cos(twist)) * fieldStrength;
     
     return applyMouseAttraction({ x: px, y: py });
 }
@@ -112,8 +150,8 @@ function calculateQuantumField(x, y) {
     const wave1 = Math.sin(fx * 2 + t) * Math.cos(fy * 2 - t);
     const wave2 = Math.cos(fx * 3 - t * 1.5) * Math.sin(fy * 3 + t * 0.5);
     
-    const px = 200 + (wave1 * 50 + Math.sin(fx * fy + t) * 30);
-    const py = 200 + (wave2 * 50 + Math.cos(fx * fy - t) * 30);
+    const px = baseWidth/2 + (wave1 * baseWidth/8 + Math.sin(fx * fy + t) * baseWidth/13);
+    const py = baseHeight/2 + (wave2 * baseHeight/8 + Math.cos(fx * fy - t) * baseHeight/13);
     
     return applyMouseAttraction({ x: px, y: py });
 }
@@ -123,7 +161,7 @@ function calculatePoint(x, y) {
     switch(pattern) {
         case 0: return calculateFlowWave(x, y);
         case 1: return calculateVortexField(x, y);
-        case 2: return calculateQuantumField(x, y * 0.4);
+        case 2: return calculateQuantumField(x * 0.4, y * 0.4);
         default: return calculateFlowWave(x, y);
     }
 }
@@ -132,20 +170,33 @@ function draw() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
+    // Apply zoom transformation
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(scale, scale);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    
     const baseHue = (Math.sin(colorT) + 1) / 2;
     const secondHue = (baseHue + 0.3) % 1;
     
     const pattern = parseInt(patternSelect.value);
-    const particleCount = pattern === 1 ? 20000 : 30000;
+    // Scale particle count based on canvas size
+    const baseParticleCount = pattern === 1 ? 20000 : 30000;
+    const scaleFactor = (baseWidth * baseHeight) / (400 * 400);
+    const particleCount = Math.floor(baseParticleCount * scaleFactor);
+    
+    // Adjust particle distribution based on canvas aspect ratio
+    const cols = Math.floor(Math.sqrt(particleCount * baseWidth / baseHeight));
+    const rows = Math.floor(particleCount / cols);
     
     for (let i = 0; i < particleCount; i++) {
-        const x = i % 100;
-        const y = i / 150;
+        const x = (i % cols) * (baseWidth / cols);
+        const y = Math.floor(i / cols) * (baseHeight / rows);
         try {
             const point = calculatePoint(x, y);
             if (isFinite(point.x) && isFinite(point.y)) {
                 ctx.beginPath();
-                ctx.arc(point.x, point.y, 0.5, 0, Math.PI * 2);
+                ctx.arc(point.x, point.y, 0.5 / scale, 0, Math.PI * 2);
                 
                 if (gradientToggle.checked) {
                     const normalizedX = point.x / canvas.width;
@@ -163,8 +214,11 @@ function draw() {
             continue;
         }
     }
+    
+    ctx.restore();
 
-    t += Math.PI / 60;
+    const speedMultiplier = parseFloat(animationSpeedInput.value) / 100;
+    t += (Math.PI / 60) * speedMultiplier;
     if (gradientToggle.checked) {
         colorT += parseFloat(colorSpeedInput.value) / 1000;
     }
